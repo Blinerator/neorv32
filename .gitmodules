@@ -1,0 +1,3 @@
+[submodule "rtl/aes_core/aes-128-fpga"]
+	path = rtl/aes_core/aes-128-fpga
+	url = git@github.com:Blinerator/aes-128-fpga.git

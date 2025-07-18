@@ -988,6 +988,7 @@ begin
         bus_req_i   => iodev_req(IODEV_CFS),
         bus_rsp_o   => iodev_rsp(IODEV_CFS),
         irq_o       => firq(FIRQ_CFS),
+        clkgen_i    => clk_gen,
         cfs_in_i    => cfs_in_i,
         cfs_out_o   => cfs_out_o
       );

@@ -22,9 +22,9 @@ use neorv32.neorv32_package.all;
 
 entity neorv32_cfs is
   generic (
-    CFS_CONFIG   : std_ulogic_vector(31 downto 0); -- custom CFS configuration generic
-    CFS_IN_SIZE  : natural; -- size of CFS input conduit in bits
-    CFS_OUT_SIZE : natural  -- size of CFS output conduit in bits
+    CFS_CONFIG   : std_ulogic_vector(31 downto 0) := (others => '0'); -- custom CFS configuration generic
+    CFS_IN_SIZE  : natural := 256; -- size of CFS input conduit in bits
+    CFS_OUT_SIZE : natural := 256 -- size of CFS output conduit in bits
   );
   port (
     clk_i       : in  std_ulogic; -- global clock line
@@ -52,10 +52,6 @@ architecture neorv32_cfs_rtl of neorv32_cfs is
   constant CB_DEC_BAR  : integer := 60;
 
   -- default CFS interface registers --
-  type cfs_regs_t is array (0 to 3) of std_ulogic_vector(31 downto 0); -- just implement 4 registers for this example
-  signal cfs_reg_wr : cfs_regs_t; -- interface registers for WRITE accesses
-  signal cfs_reg_rd : cfs_regs_t; -- interface registers for READ accesses
-
   signal control_reg : std_ulogic_vector(31 downto 0);
 
   signal reset_enc : std_ulogic;
@@ -139,7 +135,7 @@ begin
   -- still keep the generator activated. Make sure to deactivate the CFS's clkgen_en_o if no clocks are required in here to
   -- reduce dynamic power consumption.
 
-  clkgen_en_o <= '0'; -- not used for this minimal example
+  clkgen_en_o <= '0'; -- not used
 
 
   -- Interrupt ------------------------------------------------------------------------------
@@ -147,7 +143,7 @@ begin
   -- The CFS features a single interrupt signal, which is connected to the CPU's "fast interrupt" channel 1 (FIRQ1).
   -- The according CPU interrupt becomes pending as long as <irq_o> is high.
 
-  irq_o <= '0'; -- not used for this minimal example
+  irq_o <= '0'; -- not used
 
 
   -- Read/Write Access ----------------------------------------------------------------------
@@ -169,21 +165,10 @@ begin
   -- and is set INSTEAD of the ACK signal. Setting the ERR signal will raise a bus access exception with a "Device Error" qualifier
   -- that can be handled by the application software. Note that the current privilege level should not be exposed to software to
   -- maintain full virtualization. Hence, CFS-based "privilege escalation" should trigger a bus access exception (e.g. by setting 'err_o').
-  --
-  -- Host access example: Read and write access to the interface registers + bus transfer acknowledge. This example only
-  -- implements four physical r/w register (the four lowest CFS registers). The remaining addresses of the CFS are not associated
-  -- with any physical registers - any access to those is simply ignored but still acknowledged. Only full-word write accesses are
-  -- supported (and acknowledged) by this example. Sub-word write access will not alter any CFS register state and will cause
-  -- a "bus store access" exception (with a "Device Timeout" qualifier as not ACK is generated in that case).
-
+  
   bus_access: process(rstn_i, clk_i)
-    signal addr : unsigned(13 downto 0);
   begin
     if (rstn_i = '0') then
-      cfs_reg_wr(0) <= (others => '0');
-      cfs_reg_wr(1) <= (others => '0');
-      cfs_reg_wr(2) <= (others => '0');
-      cfs_reg_wr(3) <= (others => '0');
       bus_rsp_o     <= rsp_terminate_c;
     elsif rising_edge(clk_i) then -- synchronous interface for read and write accesses
       -- transfer/access acknowledge --

@@ -43,6 +43,13 @@ set_property INCREMENTAL false [get_filesets sim_1]
 # **************************************************************
 # Import HDL source files
 # **************************************************************
+# read and process AES file list
+set file_list_file [read [open "$neorv32_home/rtl/file_list_aes.f" r]]
+set file_list [string map [list "NEORV32_RTL_PATH_PLACEHOLDER" "$neorv32_home/rtl"] $file_list_file]
+puts "AES source files:"
+puts $file_list
+add_files $file_list
+set_property library neorv32 [get_files $file_list]
 
 # read and process NEORV32 SoC file list
 set file_list_file [read [open "$neorv32_home/rtl/file_list_soc.f" r]]

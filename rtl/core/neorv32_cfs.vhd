@@ -51,9 +51,7 @@ architecture neorv32_cfs_rtl of neorv32_cfs is
   constant PT_DEC_BAR  : integer := 56;
   constant CB_DEC_BAR  : integer := 60;
 
-  -- default CFS interface registers --
-  signal control_reg : std_ulogic_vector(31 downto 0);
-
+  -- Control/status signals
   signal reset_enc : std_ulogic;
   signal reset_dec : std_ulogic;
 
@@ -61,15 +59,19 @@ architecture neorv32_cfs_rtl of neorv32_cfs is
   signal key_enc : std_ulogic_vector(127 downto 0);
   signal plaintext_enc : std_ulogic_vector(127 downto 0);
   signal cipherblock_enc : std_ulogic_vector(127 downto 0);
+  signal cipherblock_enc_i : std_logic_vector(127 downto 0);
   signal start_enc : std_ulogic;
   signal done_enc : std_ulogic;
+  signal done_enc_i : std_logic;
 
   signal init_vec_dec : std_ulogic_vector(127 downto 0);
   signal key_dec : std_ulogic_vector(127 downto 0);
   signal cipherblock_dec : std_ulogic_vector(127 downto 0);
   signal plaintext_dec : std_ulogic_vector(127 downto 0);
+  signal plaintext_dec_i : std_logic_vector(127 downto 0);
   signal start_dec : std_ulogic;
   signal done_dec : std_ulogic;
+  signal done_dec_i : std_logic;
 
 begin
 
@@ -187,8 +189,11 @@ begin
         if (bus_req_i.rw = '1') then
           case to_integer(unsigned(bus_req_i.addr(15 downto 2))) is
             when CONTROL =>
-              -- TODO: don't write to ro bits
-              control_reg <= bus_req_i.data;
+              -- Write only to writable control bits
+              reset_enc <= not bus_req_i.data(0);  -- Active low
+              start_enc <= bus_req_i.data(3);
+              reset_dec <= not bus_req_i.data(15); -- Active low
+              start_dec <= bus_req_i.data(19);
 
             -- encryption IV
             when IV_ENC_BAR =>
@@ -250,16 +255,6 @@ begin
             when CB_DEC_BAR + 3 =>
               cipherblock_dec(127 downto 96) <= bus_req_i.data;
 
-            -- decryption plaintext output
-            when PT_DEC_BAR =>
-              plaintext_dec(31 downto 0) <= bus_req_i.data;
-            when PT_DEC_BAR + 1 =>
-              plaintext_dec(63 downto 32) <= bus_req_i.data;
-            when PT_DEC_BAR + 2 =>
-              plaintext_dec(95 downto 64) <= bus_req_i.data;
-            when PT_DEC_BAR + 3 =>
-              plaintext_dec(127 downto 96) <= bus_req_i.data;
-
             when others =>
               null;
           end case;
@@ -269,7 +264,12 @@ begin
           bus_rsp_o.data <= (others => '0');
           case to_integer(unsigned(bus_req_i.addr(15 downto 2))) is
             when CONTROL =>
-              bus_rsp_o.data <= control_reg;
+              bus_rsp_o.data(0)  <= not reset_enc; -- Active low
+              bus_rsp_o.data(3)  <= start_enc;
+              bus_rsp_o.data(7)  <= done_enc;
+              bus_rsp_o.data(15) <= not reset_dec; -- Active low
+              bus_rsp_o.data(19) <= start_dec;
+              bus_rsp_o.data(23) <= done_dec;
 
             -- encryption IV
             when IV_ENC_BAR =>
@@ -300,6 +300,16 @@ begin
               bus_rsp_o.data <= plaintext_enc(95 downto 64);
             when PT_ENC_BAR + 3 =>
               bus_rsp_o.data <= plaintext_enc(127 downto 96);
+
+            -- encryption cipherblock output
+            when CB_ENC_BAR =>
+              bus_rsp_o.data <= cipherblock_enc(31 downto 0);
+            when CB_ENC_BAR + 1 =>
+              bus_rsp_o.data <= cipherblock_enc(63 downto 32);
+            when CB_ENC_BAR + 2 =>
+              bus_rsp_o.data <= cipherblock_enc(95 downto 64);
+            when CB_ENC_BAR + 3 =>
+              bus_rsp_o.data <= cipherblock_enc(127 downto 96);
 
             -- decryption IV
             when IV_DEC_BAR =>
@@ -351,42 +361,41 @@ begin
     end if;
   end process bus_access;
 
-  reset_enc <= not control_reg(0); -- Active low  
-  start_enc <= control_reg(3);  
-  done_enc  <= control_reg(7); 
-  reset_dec <= not control_reg(15); -- Active low  
-  start_dec <= control_reg(19);  
-  done_dec  <= control_reg(23); 
-
   -- CFS Function Core ----------------------------------------------------------------------
   -- -------------------------------------------------------------------------------------------
   -- Instantiate AES core
-  aes_128_inst : entity work.aes_128_top_wrapper_simple(rtl)
+  aes_128_inst : entity work.aes_128_top_wrapper_simple
   generic map
   (
-    MODE = "ENC_DEC"
+    MODE => "ENC_DEC"
   )
   port map
   (
-    clk       => clk_i,
-    reset_enc => reset_enc,
-    reset_dec => reset_dec,
+    clk       => std_logic(clk_i),
+    reset_enc => std_logic(reset_enc),
+    reset_dec => std_logic(reset_dec),
 
     -- Encryption Interface
-    init_vec_enc    => init_vec_enc, 
-    key_enc         => key_enc, 
-    plaintext_enc   => plaintext_enc, 
-    cipherblock_enc => cipherblock_enc, 
-    start_enc       => start_enc, 
-    done_enc        => done_enc, 
+    init_vec_enc    => std_logic_vector(init_vec_enc), 
+    key_enc         => std_logic_vector(key_enc),
+    plaintext_enc   => std_logic_vector(plaintext_enc),
+    cipherblock_enc => cipherblock_enc_i,
+    start_enc       => std_logic(start_enc),
+    done_enc        => done_enc_i,
 
     -- Decryption Interface
-    init_vec_dec    => init_vec_dec,        
-    key_dec         => key_dec,   
-    cipherblock_dec => cipherblock_dec,        
-    plaintext_dec   => plaintext_dec,          
-    start_dec       => start_dec,    
-    done_dec        => done_dec 
+    init_vec_dec    => std_logic_vector(init_vec_dec),
+    key_dec         => std_logic_vector(key_dec),
+    cipherblock_dec => std_logic_vector(cipherblock_dec),
+    plaintext_dec   => plaintext_dec_i,
+    start_dec       => std_logic(start_dec),
+    done_dec        => done_dec_i
   );
+
+  -- Convert from std_logic to std_ulogic for consistency with the rest of neorv32
+  cipherblock_enc <= std_ulogic_vector(cipherblock_enc_i);
+  plaintext_dec   <= std_ulogic_vector(plaintext_dec_i);
+  done_enc        <= std_ulogic(done_enc_i);
+  done_dec        <= std_ulogic(done_dec_i);
 
 end neorv32_cfs_rtl;

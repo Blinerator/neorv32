@@ -1,0 +1,15 @@
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/aes_128_top_wrapper.vhd
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/aes_128_top_wrapper_simple.vhd
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/common/aes_pkg.vhd
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/common/control_fsm.vhd
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/common/key_expansion.vhd
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/dec/aes_128_top_dec.vhd
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/dec/inv_mix_columns.vhd
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/dec/inv_shift_rows.vhd
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/dec/inv_s_box.vhd
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/enc/aes_128_top_enc.vhd
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/enc/mix_columns.vhd
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/enc/shift_rows.vhd
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/enc/s_box.vhd
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/wrappers/dec_wrapper.vhd
+NEORV32_RTL_PATH_PLACEHOLDER/aes_core/aes-128-fpga/src/wrappers/enc_wrapper.vhd

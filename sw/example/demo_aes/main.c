@@ -115,13 +115,6 @@ void aes_encode(const uint32_t* key, const uint32_t* iv, const uint32_t* pt, uin
         // Wait for completion
         while(!(read_cfs(REG_CTRL) & CTRL_DONE_ENC));
 
-        // Register sweep
-        neorv32_uart0_printf("Register sweep after encryption:\n");
-        for (int i = 0; i < 61; i++) {
-            uint32_t reg_value = read_cfs(i);
-            neorv32_uart0_printf("REG[%d]: %x\n", i, reg_value);
-        }
-
         // Read ciphertext
         for(int i = 0; i < 4; i++) {
             uint8_t addr = REG_CB_ENC_0 + i;
@@ -140,40 +133,64 @@ void aes_encode(const uint32_t* key, const uint32_t* iv, const uint32_t* pt, uin
  * @param pt       Pointer to plaintext output (array of 32-bit words, length = 4 * num_blocks)
  * @param num_blocks Number of 128-bit blocks to decrypt
  **************************************************************************/
-// void aes_decode(const uint32_t* key, const uint32_t* iv, const uint32_t* ct, uint32_t* pt, size_t num_blocks) {
-//     // Reset decryption core (active low)
-//     write_cfs(REG_CTRL, 0);
-//     write_cfs(REG_CTRL, CTRL_RESET_DEC);
+void aes_decode(const uint32_t* key, const uint32_t* iv, const uint32_t* ct, uint32_t* pt, size_t num_blocks) {
+    // Reset decryption core (active low)
+    neorv32_uart0_printf("Resetting decryption core\n");
     
-//     // Write key (only need to do this once)
-//     for(int i = 0; i < 4; i++) {
-//         write_cfs(REG_KEY_DEC_0 + (i * 4), key[i]);
-//     }
+    write_cfs(REG_CTRL, 0);
+    write_cfs(REG_CTRL, CTRL_RESET_DEC);
+
+    neorv32_uart0_printf("CONTROL: %x\n", read_cfs(REG_CTRL));
     
-//     // Write initial IV (only need to do this once)
-//     for(int i = 0; i < 4; i++) {
-//         write_cfs(REG_IV_DEC_0 + (i * 4), iv[i]);
-//     }
+    // Write key (only need to do this once)
+    neorv32_uart0_printf("Writing decryption key\n");
+    for(int i = 0; i < 4; i++) {
+        uint8_t addr = REG_KEY_DEC_0 + i;
+        write_cfs(addr, key[i]);
+        neorv32_uart0_printf("KEY[%d] (ADDR: %d): %x\n", i, addr, read_cfs(addr));
+    }
     
-//     // Process each block
-//     for(size_t block = 0; block < num_blocks; block++) {
-//         // Write ciphertext for this block
-//         for(int i = 0; i < 4; i++) {
-//             write_cfs(REG_CB_DEC_0 + (i * 4), ct[block * 4 + i]);
-//         }
+    // Write initial IV (only need to do this once)
+    neorv32_uart0_printf("Writing initial vector\n");
+    for(int i = 0; i < 4; i++) {
+        uint8_t addr = REG_IV_DEC_0 + i;
+        write_cfs(addr, iv[i]);
+        neorv32_uart0_printf("IV[%d] (ADDR: %d): %x\n", i, addr, read_cfs(addr));
+    }
+    
+    // Process each block
+    neorv32_uart0_printf("Processing ciphertext\n");
+    for(size_t block = num_blocks; block-- > 0; ) {
+        // Write ciphertext for this block
+        neorv32_uart0_printf("Writing ciphertext for block %d\n", block);
+        for(int i = 0; i < 4; i++) {
+            uint8_t addr = REG_PT_DEC_0 + i;
+            write_cfs(addr, ct[block * 4 + i]);
+            neorv32_uart0_printf("CT[%d] (ADDR: %d): %x\n", i, addr, read_cfs(addr));
+        }
         
-//         // Start decryption
-//         write_cfs(REG_CTRL, CTRL_RESET_DEC | CTRL_START_DEC);
+        // Start decryption
+        neorv32_uart0_printf("Starting decryption for block %d\n", block);
+        write_cfs(REG_CTRL, CTRL_RESET_DEC | CTRL_START_DEC);
         
-//         // Wait for completion
-//         while(!(read_cfs(REG_CTRL) & CTRL_DONE_DEC));
-        
-//         // Read plaintext
-//     for(int i = 0; i < 4; i++) {
-//         pt[block * 4 + i] = read_cfs(REG_PT_DEC_0 + (i * 4));
-//     }
-//   }
-// }
+        // Wait for completion
+        while(!(read_cfs(REG_CTRL) & CTRL_DONE_DEC));
+
+        // Register sweep
+        neorv32_uart0_printf("Register sweep after decryption:\n");
+        for (int i = 0; i < 61; i++) {
+            uint32_t reg_value = read_cfs(i);
+            neorv32_uart0_printf("REG[%d]: %x\n", i, reg_value);
+        }
+
+        // Read plaintext
+        for(int i = 0; i < 4; i++) {
+            uint8_t addr = REG_CB_DEC_0 + i;
+            pt[block * 4 + i] = read_cfs(addr);
+            neorv32_uart0_printf("PT[%d] (ADDR: %d): %x\n", i, addr, read_cfs(addr));
+        }
+    }
+}
 
 /**********************************************************************//**
  * This program generates a simple dimming sequence for PWM channels 0 to 3.
@@ -236,6 +253,17 @@ int main() {
         neorv32_uart0_printf("%x", ciphertext_fips[i]);
     }
 
+    // Decrypt the data back
+    uint32_t decrypted_fips[4];
+    aes_decode(fips_key, fips_iv, ciphertext_fips, decrypted_fips, 1);
+    
+    // Print decrypted result
+    neorv32_uart0_printf("\nDecrypted FIPS data:");
+    for(int i = 3; i >= 0; i--) {
+        if (i == 3) neorv32_uart0_printf(" 0x");
+        neorv32_uart0_printf("%x", decrypted_fips[i]);
+    }
+
     // Break 128-bit values into 32-bit words
     uint32_t key[4] = {
         0x5914653F,   // Least significant 32 bits
@@ -267,6 +295,17 @@ int main() {
     for(int i = 11; i >= 0; i--) {
         if ((i+1)%4 == 0) neorv32_uart0_printf(" \n0x");
         neorv32_uart0_printf("%x", ciphertext_mb[i]);
+    }
+
+    // Decrypt the data back
+    uint32_t decrypted_mb[12];
+    aes_decode(key, iv, ciphertext_mb, decrypted_mb, 3);
+    
+    // Print decrypted result
+    neorv32_uart0_printf("\nDecrypted multi-block data:");
+    for(int i = 11; i >= 0; i--) {
+        if ((i+1)%4 == 0) neorv32_uart0_printf(" \n0x");
+        neorv32_uart0_printf("%x", decrypted_mb[i]);
     }
 
   }

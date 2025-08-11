@@ -173,6 +173,10 @@ begin
     if (rstn_i = '0') then
       bus_rsp_o     <= rsp_terminate_c;
     elsif rising_edge(clk_i) then -- synchronous interface for read and write accesses
+      -- Reset pulsed signals
+      start_enc <= '0';
+      start_dec <= '0';
+      
       -- transfer/access acknowledge --
       bus_rsp_o.ack <= bus_req_i.stb;
 

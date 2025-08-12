@@ -34,15 +34,6 @@
 #define CTRL_START_DEC  (1 << 19)
 #define CTRL_DONE_DEC   (1 << 23)
 
-// Test data
-// "This data is not for prying eyes!" in utf-8 and padded to AES block size
-#define PLAINTEXT_IN 0x546869732064617461206973206e6f7420666f7220707279696e672065796573210f0f0f0f0f0f0f0f0f0f0f0f0f0f0f
-#define IV_IN 0xED4A6097CA02ABBB9D85A20DAD30B29F // Randomly generated
-#define KEY_IN 0x896FC88039F45498991E1F555914653F // Randomly generated
-
-// We expect the output to be:
-#define CIPHERTEXT_OUT 0x6b5af2ab6ce09dd2787595b3307648642e5c5b25e1b50333a8d56d374667e341de2d58fbc43de6551da4ac771f276075 
-
 /**********************************************************************//**
  * @name User configuration
  **************************************************************************/
@@ -59,6 +50,55 @@ void write_cfs(uint8_t addr, uint32_t data){
 
 uint32_t read_cfs(uint8_t addr){
   return NEORV32_CFS->REG[addr];
+}
+
+/**********************************************************************//**
+ * Print and verify data blocks, showing differences in a pretty format
+ *
+ * @param label    Label to print with the data (e.g., "FIPS", "Multi-block")
+ * @param actual   Array of actual values
+ * @param expected Array of expected values
+ * @param num_blocks Number of 128-bit blocks (each block is 4 32-bit words)
+ **************************************************************************/
+void print_and_verify_data(const char* label, const uint32_t* actual, const uint32_t* expected, size_t num_blocks) {
+    int total_words = num_blocks * 4;
+    int error_count = 0;
+    
+    // First pass: count errors
+    for(int i = total_words - 1; i >= 0; i--) {
+        if (actual[i] != expected[i]) error_count++;
+    }
+    
+    // Print header with error summary
+    neorv32_uart0_printf("\n╔════════ %s Data \n", label);
+    
+    // Print data with error highlighting
+    for(int block = num_blocks - 1; block >= 0; block--) {
+        neorv32_uart0_printf("║ Block %d: ", block);
+        for(int word = 3; word >= 0; word--) {
+            int i = block * 4 + word;
+            if (actual[i] == expected[i]) {
+                neorv32_uart0_printf("%x", actual[i]);
+            } else {
+                neorv32_uart0_printf("\n║ ERROR at word %d:\n", word);
+                neorv32_uart0_printf("║   Got:      %x\n", actual[i]);
+                neorv32_uart0_printf("║   Expected: %x\n", expected[i]);
+            }
+            if (word > 0) neorv32_uart0_printf(" ");
+        }
+        neorv32_uart0_printf("\n");
+    }
+    
+    // Print footer with error summary
+    if (error_count > 0) {
+        neorv32_uart0_printf("╠════════════════════ FAIL ════════════════════╣\n");
+        neorv32_uart0_printf("║ Found %d error%s                                ║\n", 
+                            error_count, error_count > 1 ? "s" : " ");
+    } else {
+        neorv32_uart0_printf("╠════════════════════ PASS ════════════════════╣\n");
+        neorv32_uart0_printf("║ All values match!                            ║\n");
+    }
+    neorv32_uart0_printf("╚══════════════════════════════════════════════╝\n");
 }
 
 /**********************************************************************//**
@@ -181,15 +221,7 @@ void aes_decode(const uint32_t* key, const uint32_t* iv, const uint32_t* ct, uin
     }
 }
 
-/**********************************************************************//**
- * This program generates a simple dimming sequence for PWM channels 0 to 3.
- *
- * @note This program requires the PWM controller to be synthesized (the UART is optional).
- *
- * @return !=0 if error.
- **************************************************************************/
 int main() {
-
   // capture all exceptions and give debug info via UART
   // this is not required, but keeps us safe
   neorv32_rte_setup();
@@ -199,10 +231,7 @@ int main() {
     // setup UART at default baud rate, no interrupts
     neorv32_uart0_setup(BAUD_RATE, 0);
 
-    // say hello
     neorv32_uart0_printf("<<< AES demo program >>>\n");
-
-
 
     // FIPS test vectors
     // key - 0x2B7E151628AED2A6ABF7158809CF4F3C
@@ -210,7 +239,7 @@ int main() {
         0x09CF4F3C,  // Least significant 32 bits
         0xABF71588,
         0x28AED2A6,
-        0x2B7E1516   // Most significant 32 bits
+        0x2B7E1516   
     };
     
     uint32_t fips_iv[4] = {
@@ -222,64 +251,49 @@ int main() {
 
     // 0x3243F6A8885A308D313198A2E0370734
     uint32_t fips_pt[4] = {
-        0xE0370734,  // Least significant 32 bits
+        0xE0370734,
         0x313198A2,
         0x885A308D,
-        0x3243F6A8   // Most significant 32 bits
+        0x3243F6A8   
     };
 
     // 0x3925841D02DC09FBDC118597196A0B32
     uint32_t ciphertext_fips_exp[4] = {
-        0x196A0B32,  // Least significant 32 bits
+        0x196A0B32,  
         0xDC118597,
         0x02DC09FB,
-        0x3925841D   // Most significant 32 bits
+        0x3925841D   
     };
 
     uint32_t ciphertext_fips[4];  // Will hold the encrypted result
     
-    // Encrypt the data (3 blocks)
+    // Encrypt the data (1 block)
     aes_encode(fips_key, fips_iv, fips_pt, ciphertext_fips, 1);
     
-    // Print results
-    neorv32_uart0_printf("\nEncrypted FIPS data:");
-    for(int i = 3; i >= 0; i--) {
-        if (i == 3) neorv32_uart0_printf(" 0x");
-        neorv32_uart0_printf("%x", ciphertext_fips[i]);
-        if (ciphertext_fips[i] != ciphertext_fips_exp[i]) {
-            neorv32_uart0_printf(" (ERROR: expected 0x%x)", ciphertext_fips_exp[i]);
-        }
-    }
+    print_and_verify_data("FIPS", ciphertext_fips, ciphertext_fips_exp, 1);
 
     // Decrypt the data back
     uint32_t decrypted_fips[4];
     aes_decode(fips_key, fips_iv, ciphertext_fips, decrypted_fips, 1);
     
-    // Print decrypted result
-    neorv32_uart0_printf("\nDecrypted FIPS data:");
-    for(int i = 3; i >= 0; i--) {
-        if (i == 3) neorv32_uart0_printf(" 0x");
-        neorv32_uart0_printf("%x", decrypted_fips[i]);
-        if (decrypted_fips[i] != fips_pt[i]) {
-            neorv32_uart0_printf(" (ERROR: expected 0x%x)", fips_pt[i]);
-        }
-    }
+    print_and_verify_data("FIPS (decrypted)", decrypted_fips, fips_pt, 1);
 
-    // Break 128-bit values into 32-bit words
+    // Multi-block test
     uint32_t key[4] = {
         0x5914653F,   // Least significant 32 bits
         0x991E1F55,
         0x39F45498,
-        0x896FC880  // Most significant 32 bits
+        0x896FC880  
     };
     
     uint32_t iv[4] = {
-        0xAD30B29F,
+        0xAD30B29F, // LSB
         0x9D85A20D,
         0xCA02ABBB,
-        0xED4A6097 // MSB
+        0xED4A6097 
     };
     
+    // "This data is not for prying eyes!" in utf-8 and padded to AES block size
     uint32_t plaintext[12] = {  // 3 blocks of 128 bits each
         // LSB
         0x0f0f0f0f, 0x0f0f0f0f, 0x0f0f0f0f, 0x210f0f0f,     // Block 3
@@ -300,28 +314,13 @@ int main() {
     // Encrypt the data (3 blocks)
     aes_encode(key, iv, plaintext, ciphertext_mb, 3);
 
-    neorv32_uart0_printf("\nEncrypted multi-block data:");
-    for(int i = 11; i >= 0; i--) {
-        if ((i+1)%4 == 0) neorv32_uart0_printf(" \n0x");
-        neorv32_uart0_printf("%x", ciphertext_mb[i]);
-        if (ciphertext_mb[i] != ciphertext_mb_exp[i]) {
-            neorv32_uart0_printf(" (ERROR: expected 0x%x)\n", ciphertext_mb_exp[i]);
-        }
-    }
+    print_and_verify_data("Multi-block", ciphertext_mb, ciphertext_mb_exp, 3);
 
     // Decrypt the data back
     uint32_t decrypted_mb[12];
     aes_decode(key, iv, ciphertext_mb, decrypted_mb, 3);
     
-    // Print decrypted result
-    neorv32_uart0_printf("\nDecrypted multi-block data:");
-    for(int i = 11; i >= 0; i--) {
-        if ((i+1)%4 == 0) neorv32_uart0_printf(" \n0x");
-        neorv32_uart0_printf("%x", decrypted_mb[i]);
-        if (decrypted_mb[i] != plaintext[i]) {
-            neorv32_uart0_printf(" (ERROR: expected 0x%x)", plaintext[i]);
-        }
-    }
+    print_and_verify_data("Multi-block (decrypted)", decrypted_mb, plaintext, 3);
 
   }
   

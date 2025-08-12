@@ -72,8 +72,6 @@ uint32_t read_cfs(uint8_t addr){
  **************************************************************************/
 void aes_encode(const uint32_t* key, const uint32_t* iv, const uint32_t* pt, uint32_t* ct, size_t num_blocks) {
     // Reset encryption core (active low)
-    neorv32_uart0_printf("Resetting encryption core\n");
-    
     write_cfs(REG_CTRL, 0);
     write_cfs(REG_CTRL, CTRL_RESET_ENC);
 
@@ -135,8 +133,6 @@ void aes_encode(const uint32_t* key, const uint32_t* iv, const uint32_t* pt, uin
  **************************************************************************/
 void aes_decode(const uint32_t* key, const uint32_t* iv, const uint32_t* ct, uint32_t* pt, size_t num_blocks) {
     // Reset decryption core (active low)
-    neorv32_uart0_printf("Resetting decryption core\n");
-    
     write_cfs(REG_CTRL, 0);
     write_cfs(REG_CTRL, CTRL_RESET_DEC);
 
@@ -175,13 +171,6 @@ void aes_decode(const uint32_t* key, const uint32_t* iv, const uint32_t* ct, uin
         
         // Wait for completion
         while(!(read_cfs(REG_CTRL) & CTRL_DONE_DEC));
-
-        // Register sweep
-        neorv32_uart0_printf("Register sweep after decryption:\n");
-        for (int i = 0; i < 61; i++) {
-            uint32_t reg_value = read_cfs(i);
-            neorv32_uart0_printf("REG[%d]: %x\n", i, reg_value);
-        }
 
         // Read plaintext
         for(int i = 0; i < 4; i++) {
@@ -239,7 +228,13 @@ int main() {
         0x3243F6A8   // Most significant 32 bits
     };
 
-    // FIPS_OUTPUT = 0x3925841D02DC09FBDC118597196A0B32
+    // 0x3925841D02DC09FBDC118597196A0B32
+    uint32_t ciphertext_fips_exp[4] = {
+        0x196A0B32,  // Least significant 32 bits
+        0xDC118597,
+        0x02DC09FB,
+        0x3925841D   // Most significant 32 bits
+    };
 
     uint32_t ciphertext_fips[4];  // Will hold the encrypted result
     
@@ -251,6 +246,9 @@ int main() {
     for(int i = 3; i >= 0; i--) {
         if (i == 3) neorv32_uart0_printf(" 0x");
         neorv32_uart0_printf("%x", ciphertext_fips[i]);
+        if (ciphertext_fips[i] != ciphertext_fips_exp[i]) {
+            neorv32_uart0_printf(" (ERROR: expected 0x%x)", ciphertext_fips_exp[i]);
+        }
     }
 
     // Decrypt the data back
@@ -262,6 +260,9 @@ int main() {
     for(int i = 3; i >= 0; i--) {
         if (i == 3) neorv32_uart0_printf(" 0x");
         neorv32_uart0_printf("%x", decrypted_fips[i]);
+        if (decrypted_fips[i] != fips_pt[i]) {
+            neorv32_uart0_printf(" (ERROR: expected 0x%x)", fips_pt[i]);
+        }
     }
 
     // Break 128-bit values into 32-bit words
@@ -286,6 +287,14 @@ int main() {
         0x206e6f74, 0x61206973, 0x20646174, 0x54686973      // Block 1
     };
 
+    // 0x6b5af2ab6ce09dd2787595b3307648642e5c5b25e1b50333a8d56d374667e341de2d58fbc43de6551da4ac771f276075 
+    uint32_t ciphertext_mb_exp[12] = {  // 3 blocks of 128 bits each
+        // LSB
+        0x1f276075, 0x1da4ac77, 0xc43de655, 0xde2d58fb,     // Block 3
+        0x4667e341, 0xa8d56d37, 0xe1b50333, 0x2e5c5b25,      // Block 2
+        0x30764864, 0x787595b3, 0x6ce09dd2, 0x6b5af2ab      // Block 1
+    };
+
     uint32_t ciphertext_mb[12];  // Will hold the encrypted result
     
     // Encrypt the data (3 blocks)
@@ -295,6 +304,9 @@ int main() {
     for(int i = 11; i >= 0; i--) {
         if ((i+1)%4 == 0) neorv32_uart0_printf(" \n0x");
         neorv32_uart0_printf("%x", ciphertext_mb[i]);
+        if (ciphertext_mb[i] != ciphertext_mb_exp[i]) {
+            neorv32_uart0_printf(" (ERROR: expected 0x%x)\n", ciphertext_mb_exp[i]);
+        }
     }
 
     // Decrypt the data back
@@ -306,6 +318,9 @@ int main() {
     for(int i = 11; i >= 0; i--) {
         if ((i+1)%4 == 0) neorv32_uart0_printf(" \n0x");
         neorv32_uart0_printf("%x", decrypted_mb[i]);
+        if (decrypted_mb[i] != plaintext[i]) {
+            neorv32_uart0_printf(" (ERROR: expected 0x%x)", plaintext[i]);
+        }
     }
 
   }
